@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendTestEmail } from "@/lib/email/email-service";
+import { requirePanelSession } from "@/lib/auth/guard";
 
 export async function POST(request: NextRequest) {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   let body: {
     template_id?: string;
     to?: string;

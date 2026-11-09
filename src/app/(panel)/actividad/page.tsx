@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -73,6 +74,8 @@ export default function ActividadPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [q, setQ] = useState("");
   const [selectedLog, setSelectedLog] = useState<AuditEntry | null>(null);
 
   const fetchLogs = useCallback(async () => {
@@ -80,16 +83,19 @@ export default function ActividadPage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: "25" });
       if (statusFilter !== "all") params.set("statusCode", statusFilter);
+      if (q) params.set("q", q);
 
       const res = await fetch(`/api/audit?${params}`);
+      if (!res.ok) throw new Error("Error al cargar actividad");
       const json = await res.json();
       setData(json);
     } catch {
       toast.error("Error al cargar actividad");
+      setData(null);
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter]);
+  }, [page, statusFilter, q]);
 
   useEffect(() => {
     fetchLogs();
@@ -103,6 +109,28 @@ export default function ActividadPage() {
           Todas las llamadas a la API desde sistemas externos (éxitos y fallos)
         </p>
         <div className={styles.filters}>
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setQ(query.trim());
+                setPage(1);
+              }
+            }}
+            placeholder="Ruta, API key o destinatario"
+            className={styles.searchInput}
+            aria-label="Buscar actividad"
+          />
+          <Button
+            variant="outline"
+            onClick={() => {
+              setQ(query.trim());
+              setPage(1);
+            }}
+          >
+            Buscar
+          </Button>
           <Select
             value={statusFilter}
             onValueChange={(v) => {
@@ -139,6 +167,7 @@ export default function ActividadPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Fecha</TableHead>
+                <TableHead>Método</TableHead>
                 <TableHead>Ruta</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>API Key</TableHead>
@@ -153,6 +182,7 @@ export default function ActividadPage() {
                   <TableCell className={styles.mono}>
                     {new Date(log.createdAt).toLocaleString()}
                   </TableCell>
+                  <TableCell className={styles.mono}>{log.method}</TableCell>
                   <TableCell className={styles.mono}>{log.path}</TableCell>
                   <TableCell>
                     <Badge variant={statusVariant(log.statusCode)}>

@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
-import { prisma } from "@/lib/db";
-import { decrypt } from "@/lib/encrypt";
+import { prisma } from "../db";
+import { decrypt } from "../encrypt";
 
 const RETRY_DELAYS_MS = [1000, 2000, 4000];
 const MAX_RETRIES = 3;

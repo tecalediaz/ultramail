@@ -53,6 +53,8 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [q, setQ] = useState("");
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
 
   const fetchLogs = useCallback(async () => {
@@ -60,16 +62,19 @@ export default function LogsPage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: "25" });
       if (statusFilter !== "all") params.set("status", statusFilter);
+      if (q) params.set("q", q);
 
       const res = await fetch(`/api/logs?${params}`);
+      if (!res.ok) throw new Error("Error al cargar historial");
       const json = await res.json();
       setData(json);
     } catch {
       toast.error("Error al cargar historial");
+      setData(null);
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter]);
+  }, [page, statusFilter, q]);
 
   useEffect(() => {
     fetchLogs();
@@ -80,6 +85,28 @@ export default function LogsPage() {
       <div className={styles.header}>
         <h1 className={styles.title}>Historial de envíos</h1>
         <div className={styles.filters}>
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setQ(query.trim());
+                setPage(1);
+              }
+            }}
+            placeholder="Buscar destinatario"
+            className={styles.searchInput}
+            aria-label="Buscar por destinatario"
+          />
+          <Button
+            variant="outline"
+            onClick={() => {
+              setQ(query.trim());
+              setPage(1);
+            }}
+          >
+            Buscar
+          </Button>
           <Select
             value={statusFilter}
             onValueChange={(v) => {

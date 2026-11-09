@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { encrypt } from "@/lib/encrypt";
+import { requirePanelSession } from "@/lib/auth/guard";
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   const { id } = await params;
   let body: {
     name?: string;
@@ -81,6 +85,9 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   const { id } = await params;
   const existing = await prisma.sender.findUnique({
     where: { id },

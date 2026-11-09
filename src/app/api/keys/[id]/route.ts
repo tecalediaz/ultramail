@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requirePanelSession } from "@/lib/auth/guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   const { id } = await params;
 
   let body: { active?: boolean; name?: string };
@@ -28,10 +32,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     },
   });
 
-  return NextResponse.json(updated);
+  return NextResponse.json({
+    ...updated,
+    key: updated.key.slice(0, 8) + "..." + updated.key.slice(-4),
+  });
 }
 
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   const { id } = await params;
 
   const existing = await prisma.apiKey.findUnique({ where: { id } });

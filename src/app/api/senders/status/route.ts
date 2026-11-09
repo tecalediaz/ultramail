@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifySender } from "@/lib/email/smtp-transport";
+import { requirePanelSession } from "@/lib/auth/guard";
 
 export async function GET() {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   const senders = await prisma.sender.findMany({
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
     select: { id: true, name: true, fromEmail: true, isDefault: true },

@@ -97,10 +97,6 @@
   line-height: 1.6;
 }
 
-.sectionSubtitleWhite {
-  color: var(--foreground);
-}
-
 .steps {
   display: grid;
   gap: 2rem;

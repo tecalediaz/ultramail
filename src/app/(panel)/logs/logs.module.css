@@ -8,6 +8,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .title {
@@ -20,12 +22,17 @@
 
 .filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
 
 .filterSelect {
   width: 130px;
+}
+
+.searchInput {
+  width: 220px;
 }
 
 .empty {

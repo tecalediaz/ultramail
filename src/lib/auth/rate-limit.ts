@@ -2,8 +2,8 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { createHash, timingSafeEqual } from "crypto";
 
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOGIN_BLOCK_MINUTES = 15;
+const MAX_LOGIN_ATTEMPTS = 10;
+const LOGIN_BLOCK_MINUTES = 5;
 const MAX_NEWSLETTER_PER_HOUR = 5;
 const NEWSLETTER_WINDOW_MS = 60 * 60 * 1000;
 

@@ -8,7 +8,7 @@ import {
   History,
   Activity,
   Settings,
-  Bot,
+  BookOpen,
   LogOut,
   BarChart3,
   PanelLeftClose,
@@ -24,7 +24,7 @@ const NAV_ITEMS = [
   { href: "/metricas", label: "Métricas", icon: BarChart3 },
   { href: "/newsletter", label: "Newsletter", icon: Mail },
   { href: "/settings", label: "Configuración", icon: Settings },
-  { href: "/aia", label: "AIA", icon: Bot },
+  { href: "/mcp", label: "Documentación", icon: BookOpen },
 ];
 
 export function Sidebar({

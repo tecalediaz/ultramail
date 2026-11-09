@@ -1,9 +1,11 @@
 {
   "mcpServers": {
     "ultramail": {
-      "command": "npx",
-      "args": ["tsx", "mcp-server/index.ts"],
-      "cwd": "C:/Users/aleke/iCloudDrive/Desktop/Ultramail/ultramail"
+      "command": "/usr/local/bin/node",
+      "args": [
+        "/ruta/completa/al/proyecto/ultramail/node_modules/tsx/dist/cli.mjs",
+        "/ruta/completa/al/proyecto/ultramail/mcp-server/index.ts"
+      ]
     }
   }
 }

@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { encrypt } from "@/lib/encrypt";
+import { requirePanelSession } from "@/lib/auth/guard";
 
 export async function GET() {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   const senders = await prisma.sender.findMany({
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
     select: {
@@ -21,6 +25,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   let body: {
     name?: string;
     fromEmail?: string;

@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth/session";
+import { requirePanelSession } from "@/lib/auth/guard";
 import {
   getClientIp,
   checkNewsletterRateLimit,
@@ -112,11 +112,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  const session = await getSession();
-
-  if (!session.isLoggedIn) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const denied = await requirePanelSession();
+  if (denied) return denied;
 
   const subscribers = await prisma.$queryRaw<
     { id: string; name: string; email: string; createdAt: Date }[]
@@ -132,4 +129,27 @@ export async function GET() {
       createdAt: s.createdAt.toISOString(),
     }))
   );
+}
+
+export async function DELETE(request: NextRequest) {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
+  const id = new URL(request.url).searchParams.get("id")?.trim();
+  if (!id) {
+    return NextResponse.json({ error: "id es requerido" }, { status: 400 });
+  }
+
+  const existing = await prisma.newsletterSubscriber.findUnique({
+    where: { id },
+  });
+  if (!existing) {
+    return NextResponse.json(
+      { error: "Suscriptor no encontrado" },
+      { status: 404 }
+    );
+  }
+
+  await prisma.newsletterSubscriber.delete({ where: { id } });
+  return NextResponse.json({ success: true });
 }

@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 /**
- * Ultramail MCP Server
- * Permite que un agente de IA controle Ultramail mediante herramientas MCP.
- * Requiere: DATABASE_URL, DIRECT_URL en .env (o variables de entorno)
+ * Servidor MCP de Ultramail.
+ * Expone el sistema completo: plantillas, envíos, historial, remitentes,
+ * métricas, API keys, auditoría y suscriptores.
+ * Requiere DATABASE_URL y DIRECT_URL (.env en la raíz del proyecto o el entorno).
  */
 
 import { config } from "dotenv";
-import { resolve } from "path";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v3";
 import { PrismaClient } from "@prisma/client";
 
-config({ path: resolve(process.cwd(), ".env"), quiet: true });
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+config({ path: resolve(projectRoot, ".env"), quiet: true });
 
 const prisma = new PrismaClient();
 
@@ -30,7 +33,7 @@ async function getExtractVariables() {
 const server = new McpServer({
   name: "ultramail",
   version: "1.0.0",
-  description: `Ultramail es un microservicio de correo electrónico. Usa las herramientas para listar/crear/editar plantillas, enviar correos, ver logs y gestionar API keys. Las variables en plantillas usan sintaxis {{nombre}}.`,
+  description: `Ultramail es un microservicio de correo. Las herramientas cubren plantillas, envíos, historial, remitentes SMTP, métricas, API keys, auditoría y suscriptores. Las variables de plantilla usan la sintaxis {{nombre}}.`,
 });
 
 server.tool(
@@ -323,78 +326,18 @@ server.tool(
 
 server.tool(
   "ultramail_metrics",
-  "Obtiene métricas: emails por día, tasa de éxito, alertas de remitentes (últimos 14 días)",
-  {},
-  async () => {
-    const days = 14;
-    const now = new Date();
-    const startDate = new Date(now);
-    startDate.setUTCDate(startDate.getUTCDate() - days + 1);
-    startDate.setUTCHours(0, 0, 0, 0);
-
-    const logs = await prisma.emailLog.findMany({
-      where: { sentAt: { gte: startDate } },
-      select: { status: true, sentAt: true },
-    });
-
-    const dayMap = new Map<string, { sent: number; failed: number }>();
-    for (let i = 0; i < days; i++) {
-      const d = new Date(startDate.getTime());
-      d.setUTCDate(startDate.getUTCDate() + i);
-      const key = d.toISOString().slice(0, 10);
-      dayMap.set(key, { sent: 0, failed: 0 });
-    }
-
-    for (const log of logs) {
-      const key = new Date(log.sentAt).toISOString().slice(0, 10);
-      const entry = dayMap.get(key);
-      if (entry) {
-        if (log.status === "sent") entry.sent++;
-        else entry.failed++;
-      }
-    }
-
-    const emailsPerDay = Array.from(dayMap.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, data]) => ({
-        date,
-        sent: data.sent,
-        failed: data.failed,
-        total: data.sent + data.failed,
-      }));
-
-    const totalSent = logs.filter((l) => l.status === "sent").length;
-    const totalFailed = logs.filter((l) => l.status === "failed").length;
-    const successRate =
-      totalSent + totalFailed > 0 ? totalSent / (totalSent + totalFailed) : 1;
-
-    const senderAlerts = await prisma.sender.findMany({
-      where: { verifyFailureCount: { gte: 3 } },
-      select: {
-        id: true,
-        name: true,
-        fromEmail: true,
-        lastVerifyFailedAt: true,
-        verifyFailureCount: true,
-      },
-    });
-
+  "Obtiene métricas de envío: por día, por plantilla, tasa de éxito y alertas de remitentes. days admite 7, 14 o 30; si se omite o es inválido, usa 14. successRate es null cuando no hay envíos en el rango.",
+  {
+    days: z
+      .number()
+      .optional()
+      .describe("Ventana en días: 7, 14 o 30. Por defecto 14."),
+  },
+  async ({ days }) => {
+    const { collectMetrics } = await import("../src/lib/metrics");
+    const snapshot = await collectMetrics(prisma, days);
     return {
-      content: [{
-        type: "text" as const,
-        text: JSON.stringify({
-          emailsPerDay,
-          successRate: Math.round(successRate * 100) / 100,
-          totalLast14Days: { sent: totalSent, failed: totalFailed },
-          senderAlerts: senderAlerts.map((s) => ({
-            id: s.id,
-            name: s.name,
-            fromEmail: s.fromEmail,
-            lastFailureAt: s.lastVerifyFailedAt?.toISOString() ?? null,
-            failureCount: s.verifyFailureCount,
-          })),
-        }, null, 2),
-      }],
+      content: [{ type: "text" as const, text: JSON.stringify(snapshot, null, 2) }],
     };
   }
 );
@@ -572,7 +515,13 @@ server.tool(
       },
     });
     return {
-      content: [{ type: "text" as const, text: JSON.stringify(updated, null, 2) }],
+      content: [{
+        type: "text" as const,
+        text: JSON.stringify({
+          ...updated,
+          key: updated.key.slice(0, 8) + "..." + updated.key.slice(-4),
+        }, null, 2),
+      }],
     };
   }
 );
@@ -623,6 +572,41 @@ server.tool(
         type: "text" as const,
         text: JSON.stringify({ logs, total, page: page ?? 1, totalPages: Math.ceil(total / take) }, null, 2),
       }],
+    };
+  }
+);
+
+server.tool(
+  "ultramail_list_subscribers",
+  "Lista los suscriptores del newsletter (nombre, email y fecha de alta)",
+  {},
+  async () => {
+    const subscribers = await prisma.newsletterSubscriber.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(subscribers, null, 2) }],
+    };
+  }
+);
+
+server.tool(
+  "ultramail_delete_subscriber",
+  "Elimina un suscriptor del newsletter",
+  { subscriber_id: z.string().describe("ID del suscriptor") },
+  async ({ subscriber_id }) => {
+    const existing = await prisma.newsletterSubscriber.findUnique({
+      where: { id: subscriber_id },
+    });
+    if (!existing) {
+      return {
+        content: [{ type: "text" as const, text: `Suscriptor no encontrado: ${subscriber_id}` }],
+        isError: true,
+      };
+    }
+    await prisma.newsletterSubscriber.delete({ where: { id: subscriber_id } });
+    return {
+      content: [{ type: "text" as const, text: `Suscriptor ${subscriber_id} eliminado correctamente` }],
     };
   }
 );

@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ultramail
 
-## Getting Started
+Microservicio privado para diseñar plantillas de correo, enviarlas por API y revisar historial, actividad y métricas desde un panel.
 
-First, run the development server:
+## Qué incluye
+
+- Plantillas HTML con variables `{{nombre}}` en el asunto y en el cuerpo.
+- Envío por `POST /api/send` con API key, remitente SMTP elegido o el predeterminado, y adjuntos (base64 o URL `https`, hasta 10 MB en total).
+- Varios remitentes SMTP. Las contraseñas se guardan cifradas.
+- Historial de envíos, auditoría de la API, métricas de 7, 14 y 30 días y alertas de remitentes con fallos de verificación.
+- Newsletter de la landing y servidor MCP con las mismas operaciones que el panel.
+
+## Requisitos
+
+- Node.js 20 o superior
+- PostgreSQL
+
+## Puesta en marcha
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Completá `.env` en local. No lo subas al repositorio. Las variables son:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Uso |
+| --- | --- |
+| `DATABASE_URL` | Conexión a Postgres (con pooler, si el proveedor lo separa) |
+| `DIRECT_URL` | Conexión directa, la que usa Prisma para el esquema |
+| `ENCRYPTION_KEY` | Secreto de al menos 32 caracteres para cifrar contraseñas SMTP |
+| `PANEL_PASSWORD` | Contraseña del panel |
+| `SESSION_SECRET` | Secreto de al menos 32 caracteres para la cookie de sesión |
+| `NEXT_PUBLIC_APP_URL` | URL pública de la app |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+No hay carpeta de migraciones. El esquema vive en `prisma/schema.prisma`. Para crearlo o actualizarlo en la base:
 
-## Learn More
+```bash
+npx prisma db push
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+- Landing: [http://localhost:3000](http://localhost:3000)
+- Panel: [http://localhost:3000/login](http://localhost:3000/login)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Diez intentos fallidos de login bloquean esa IP durante 5 minutos.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
+| Comando | Qué hace |
+| --- | --- |
+| `npm run dev` | Servidor de desarrollo |
+| `npm run build` | Genera el cliente de Prisma y compila Next.js |
+| `npm run start` | Sirve la build |
+| `npm run mcp` | Arranca el servidor MCP por stdio |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## API
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Públicas:
+
+- `POST /api/send` — header `X-API-Key`. Cuerpo: `template_id`, `to`, y de forma opcional `variables`, `sender_id` y `attachments`.
+- `POST /api/newsletter` — cuerpo `{ "name", "email" }`. Sin API key.
+- `GET /api/health` — estado de la base y de los remitentes. Sin API key.
+
+El resto de `/api/*` (plantillas, logs, auditoría, métricas, remitentes, keys, alta y baja de suscriptores, envío de prueba) exige la sesión del panel. `GET /api/metrics?days=` acepta 7, 14 o 30. `GET /api/logs?q=` filtra por destinatario.
+
+La documentación de uso, con el ejemplo de envío y la lista de herramientas, está en el panel en `/mcp`.
+
+## MCP
+
+El servidor está en `mcp-server/index.ts`. Al arrancar lee `.env` y necesita `DATABASE_URL`, `DIRECT_URL` y `ENCRYPTION_KEY`. En el cliente MCP, apuntá el comando a ese archivo con una ruta absoluta, o usá `npm run mcp`.
+
+Las herramientas cubren plantillas, envíos, historial, remitentes, métricas (`days`: 7, 14 o 30), API keys, auditoría y suscriptores. `ultramail_create_api_key` es la única que devuelve la key completa. El resto la enmascara.
+
+## Panel
+
+Plantillas, historial, actividad de la API, métricas, newsletter y configuración de remitentes y API keys. La ruta `/mcp` del menú es la documentación de uso.

@@ -36,7 +36,7 @@ export default function LoginPage() {
         setError(
           data.error ||
             (res.status === 429
-              ? "Demasiados intentos. Espera 15 minutos antes de intentar de nuevo."
+              ? "Tras 10 intentos fallidos, el acceso queda bloqueado por 5 minutos."
               : "Error al iniciar sesión")
         );
         return;

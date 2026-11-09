@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import {
   getClientIp,
@@ -8,14 +9,51 @@ import {
   clearLoginAttempts,
 } from "@/lib/auth/rate-limit";
 
+function dbErrorCode(error: unknown): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof (error as { code: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+  return "unknown";
+}
+
+// Neon can suspend the compute. A dead pool then throws before the password
+// is checked, and the client only sees a generic login error. Retry once on a
+// fresh connection; if the database is still down, do not turn that into a 500.
+async function withLoginStore<T>(run: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    console.error("login rate-limit failed", dbErrorCode(error));
+    try {
+      await prisma.$disconnect();
+    } catch {
+      // The client may already be disconnected.
+    }
+    try {
+      return await run();
+    } catch (retryError) {
+      console.error("login rate-limit failed", dbErrorCode(retryError));
+      return fallback;
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
 
-  const blocked = await checkLoginBlocked(ip);
+  const blocked = await withLoginStore(() => checkLoginBlocked(ip), {
+    blocked: false,
+  });
   if (blocked.blocked) {
     return NextResponse.json(
       {
-        error: "Demasiados intentos fallidos. Espera antes de intentar de nuevo.",
+        error:
+          "Tras 10 intentos fallidos, el acceso queda bloqueado por 5 minutos.",
         retryAfter: blocked.retryAfter,
       },
       {
@@ -38,12 +76,14 @@ export async function POST(request: NextRequest) {
   const expectedPassword = process.env.PANEL_PASSWORD ?? "";
 
   if (!password || !secureCompare(password, expectedPassword)) {
-    const result = await recordFailedLogin(ip);
+    const result = await withLoginStore(() => recordFailedLogin(ip), {
+      blocked: false,
+    });
     if (result.blocked) {
       return NextResponse.json(
         {
           error:
-            "Demasiados intentos fallidos. La cuenta queda bloqueada por 15 minutos.",
+            "Tras 10 intentos fallidos, el acceso queda bloqueado por 5 minutos.",
           retryAfter: result.retryAfter,
         },
         {
@@ -63,7 +103,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await clearLoginAttempts(ip);
+  await withLoginStore(async () => {
+    await clearLoginAttempts(ip);
+    return true;
+  }, false);
 
   const session = await getSession();
   session.isLoggedIn = true;

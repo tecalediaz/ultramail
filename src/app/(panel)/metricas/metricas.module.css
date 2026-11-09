@@ -10,8 +10,12 @@
   gap: 0.25rem;
 }
 
-.header button {
-  align-self: flex-start;
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
 }
 
 .title {

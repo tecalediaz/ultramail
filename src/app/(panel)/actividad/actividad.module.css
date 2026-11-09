@@ -26,12 +26,17 @@
 
 .filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
 
 .filterSelect {
   width: 160px;
+}
+
+.searchInput {
+  width: 240px;
 }
 
 .mono {

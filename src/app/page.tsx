@@ -163,27 +163,6 @@ export default function LandingPage() {
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>AIA — Herramienta innovadora</h2>
-        <p className={`${styles.sectionSubtitle} ${styles.sectionSubtitleWhite}`}>
-          La AIA (Asistente de Información para Agentes) es una interfaz pública
-          que documenta todo el sistema Ultramail para que agentes de IA puedan
-          leer la arquitectura, los modelos de datos y la API. Pensada para
-          integración con MCP (Model Context Protocol), permite que asistentes
-          como Cursor o Claude lean la documentación y configuren el sistema sin
-          intervención manual. Creada por{" "}
-          <a
-            href="https://alekey.com.ar"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.inlineLink}
-          >
-            Ale Trece
-          </a>
-          .
-        </p>
-      </section>
-
-      <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Contacto</h2>
         <p className={styles.sectionSubtitle}>
           Creado por Ale Trece. Seguime en redes o escribime a{" "}

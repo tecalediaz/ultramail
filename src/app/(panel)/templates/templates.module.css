@@ -8,6 +8,21 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.searchInput {
+  width: 260px;
+}
+
+.clickableRow {
+  cursor: pointer;
 }
 
 .title {

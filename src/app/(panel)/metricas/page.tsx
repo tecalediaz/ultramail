@@ -14,12 +14,31 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "sonner";
 import { Loader } from "@/components/loader/loader";
 import styles from "./metricas.module.css";
 
+const RANGES = [7, 14, 30] as const;
+type RangeDays = (typeof RANGES)[number];
+
 interface DayMetric {
   date: string;
+  sent: number;
+  failed: number;
+  total: number;
+}
+
+interface TemplateMetric {
+  id: string;
+  name: string;
   sent: number;
   failed: number;
   total: number;
@@ -34,172 +53,211 @@ interface SenderAlert {
 }
 
 interface MetricsResponse {
+  days: number;
   emailsPerDay: DayMetric[];
-  successRate: number;
-  totalLast14Days: { sent: number; failed: number };
+  successRate: number | null;
+  totals: { sent: number; failed: number };
+  byTemplate: TemplateMetric[];
   senderAlerts: SenderAlert[];
 }
 
+function formatDay(isoDate: string) {
+  const [, month, day] = isoDate.split("-");
+  if (!month || !day) return isoDate;
+  return `${day}/${month}`;
+}
+
+function formatRate(rate: number | null) {
+  if (rate === null) return "—";
+  const percent = Math.round(rate * 1000) / 10;
+  return `${percent}%`;
+}
+
 export default function MetricasPage() {
+  const [days, setDays] = useState<RangeDays>(14);
   const [data, setData] = useState<MetricsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchMetrics = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/metrics");
+      const res = await fetch(`/api/metrics?days=${days}`);
       if (!res.ok) throw new Error("Error al cargar métricas");
-      const json = await res.json();
+      const json: MetricsResponse = await res.json();
       setData(json);
     } catch {
       toast.error("Error al cargar métricas");
+      setData(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [days]);
 
   useEffect(() => {
     fetchMetrics();
   }, [fetchMetrics]);
-
-  if (loading) {
-    return (
-      <div className={styles.page}>
-        <h1 className={styles.title}>Métricas</h1>
-        <Loader size="md" />
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className={styles.page}>
-        <h1 className={styles.title}>Métricas</h1>
-        <div className={styles.empty}>No se pudieron cargar las métricas.</div>
-      </div>
-    );
-  }
-
-  const { emailsPerDay, successRate, totalLast14Days, senderAlerts } = data;
-  const totalEmails = totalLast14Days.sent + totalLast14Days.failed;
 
   return (
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>Métricas</h1>
         <p className={styles.subtitle}>
-          Emails enviados por día y estado de remitentes (últimos 14 días)
+          Envíos, fallos y plantillas de los últimos {days} días
         </p>
-        <Button variant="outline" onClick={fetchMetrics}>
-          Actualizar
-        </Button>
+        <div className={styles.toolbar}>
+          {RANGES.map((range) => (
+            <Button
+              key={range}
+              variant={days === range ? "default" : "outline"}
+              size="sm"
+              onClick={() => setDays(range)}
+            >
+              {range} días
+            </Button>
+          ))}
+          <Button variant="outline" size="sm" onClick={fetchMetrics}>
+            Actualizar
+          </Button>
+        </div>
       </div>
 
-      <div className={styles.stats}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Total enviados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span className={styles.statValue}>{totalLast14Days.sent}</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Fallidos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span className={styles.statValue}>{totalLast14Days.failed}</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Tasa de éxito</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span className={styles.statValue}>
-              {totalEmails > 0 ? `${Math.round(successRate * 100)}%` : "—"}
-            </span>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Enviados por día</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className={styles.chart}>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={emailsPerDay}>
-                <CartesianGrid strokeDasharray="3 3" className={styles.grid} />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => v.slice(5)}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  tick={{ fontSize: 11 }}
-                  domain={[0, "auto"]}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                  }}
-                  labelFormatter={(v) => `Fecha: ${v}`}
-                />
-                <Legend />
-                <Bar
-                  dataKey="sent"
-                  name="Enviados"
-                  fill="var(--chart-2)"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar
-                  dataKey="failed"
-                  name="Fallidos"
-                  fill="var(--chart-5)"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+      {loading ? (
+        <Loader size="md" />
+      ) : !data ? (
+        <div className={styles.empty}>No se pudieron cargar las métricas.</div>
+      ) : (
+        <>
+          <div className={styles.stats}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Enviados</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <span className={styles.statValue}>{data.totals.sent}</span>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Fallidos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <span className={styles.statValue}>{data.totals.failed}</span>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Tasa de éxito</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <span className={styles.statValue}>
+                  {formatRate(data.successRate)}
+                </span>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
 
-      {senderAlerts.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Alertas de remitentes</CardTitle>
-            <p className={styles.subtitle}>
-              Remitentes con 3 o más fallos de verificación recientes
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className={styles.alertList}>
-              {senderAlerts.map((s) => (
-                <div key={s.id} className={styles.alertItem}>
-                  <div>
-                    <strong>{s.name}</strong> ({s.fromEmail})
-                  </div>
-                  <div className={styles.alertMeta}>
-                    <Badge variant="destructive">
-                      {s.failureCount} fallos de verificación
-                    </Badge>
-                    {s.lastFailureAt && (
-                      <span className={styles.mono}>
-                        Último:{" "}
-                        {new Date(s.lastFailureAt).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Enviados y fallidos por día</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className={styles.chart}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={data.emailsPerDay}>
+                    <CartesianGrid strokeDasharray="3 3" className={styles.grid} />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={formatDay}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 11 }}
+                      domain={[0, "auto"]}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 0,
+                      }}
+                      labelFormatter={(value) => formatDay(String(value))}
+                    />
+                    <Legend />
+                    <Bar dataKey="sent" name="Enviados" fill="var(--chart-2)" />
+                    <Bar dataKey="failed" name="Fallidos" fill="var(--chart-5)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Por plantilla</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data.byTemplate.length === 0 ? (
+                <p className={styles.subtitle}>
+                  No hay envíos de plantillas en este rango.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Plantilla</TableHead>
+                      <TableHead>Enviados</TableHead>
+                      <TableHead>Fallidos</TableHead>
+                      <TableHead>Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.byTemplate.map((template) => (
+                      <TableRow key={template.id}>
+                        <TableCell>{template.name}</TableCell>
+                        <TableCell className={styles.mono}>{template.sent}</TableCell>
+                        <TableCell className={styles.mono}>{template.failed}</TableCell>
+                        <TableCell className={styles.mono}>{template.total}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {data.senderAlerts.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Alertas de remitentes</CardTitle>
+                <p className={styles.subtitle}>
+                  Remitentes con 3 o más fallos de verificación
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className={styles.alertList}>
+                  {data.senderAlerts.map((sender) => (
+                    <div key={sender.id} className={styles.alertItem}>
+                      <div>
+                        <strong>{sender.name}</strong> ({sender.fromEmail})
+                      </div>
+                      <div className={styles.alertMeta}>
+                        <Badge variant="destructive">
+                          {sender.failureCount} fallos de verificación
+                        </Badge>
+                        {sender.lastFailureAt && (
+                          <span className={styles.mono}>
+                            Último: {new Date(sender.lastFailureAt).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );

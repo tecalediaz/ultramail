@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -17,6 +18,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader } from "@/components/loader/loader";
 import { toast } from "sonner";
@@ -36,6 +45,9 @@ export default function TemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<Template | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
@@ -44,6 +56,7 @@ export default function TemplatesPage() {
   async function fetchTemplates() {
     try {
       const res = await fetch("/api/templates");
+      if (!res.ok) throw new Error("Error al cargar plantillas");
       const data = await res.json();
       setTemplates(data);
     } catch {
@@ -53,27 +66,50 @@ export default function TemplatesPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta plantilla y todos sus logs?")) return;
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return templates;
+    return templates.filter((template) => {
+      const haystack = [
+        template.name,
+        template.subject,
+        ...template.variables,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [templates, query]);
 
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      const res = await fetch(`/api/templates/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/templates/${pendingDelete.id}`, {
+        method: "DELETE",
+      });
       if (!res.ok) {
         toast.error("Error al eliminar");
         return;
       }
       toast.success("Plantilla eliminada");
+      setPendingDelete(null);
       fetchTemplates();
     } catch {
       toast.error("Error de conexión");
+    } finally {
+      setDeleting(false);
     }
   }
 
   async function handleDuplicate(template: Template) {
     try {
-      const original = await fetch(`/api/templates/${template.id}`).then((r) =>
-        r.json()
-      );
+      const originalRes = await fetch(`/api/templates/${template.id}`);
+      if (!originalRes.ok) {
+        toast.error("Error al duplicar");
+        return;
+      }
+      const original = await originalRes.json();
 
       const res = await fetch("/api/templates", {
         method: "POST",
@@ -109,9 +145,18 @@ export default function TemplatesPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>Plantillas</h1>
-        <Button onClick={() => router.push("/templates/new")}>
-          Nueva plantilla
-        </Button>
+        <div className={styles.headerActions}>
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar nombre, asunto o variable"
+            className={styles.searchInput}
+            aria-label="Buscar plantillas"
+          />
+          <Button onClick={() => router.push("/templates/new")}>
+            Nueva plantilla
+          </Button>
+        </div>
       </div>
 
       {templates.length === 0 ? (
@@ -120,6 +165,10 @@ export default function TemplatesPage() {
           <Button onClick={() => router.push("/templates/new")}>
             Crear primera plantilla
           </Button>
+        </div>
+      ) : visible.length === 0 ? (
+        <div className={styles.empty}>
+          <p>Ninguna plantilla coincide con la búsqueda.</p>
         </div>
       ) : (
         <Table>
@@ -134,8 +183,12 @@ export default function TemplatesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {templates.map((t) => (
-              <TableRow key={t.id}>
+            {visible.map((t) => (
+              <TableRow
+                key={t.id}
+                className={styles.clickableRow}
+                onClick={() => router.push(`/templates/${t.id}`)}
+              >
                 <TableCell className={styles.nameCell}>{t.name}</TableCell>
                 <TableCell>{t.subject}</TableCell>
                 <TableCell>
@@ -151,7 +204,7 @@ export default function TemplatesPage() {
                 <TableCell>
                   {new Date(t.updatedAt).toLocaleDateString()}
                 </TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm">
@@ -168,7 +221,7 @@ export default function TemplatesPage() {
                         Duplicar
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => handleDelete(t.id)}
+                        onClick={() => setPendingDelete(t)}
                         className={styles.deleteItem}
                       >
                         Eliminar
@@ -181,6 +234,38 @@ export default function TemplatesPage() {
           </TableBody>
         </Table>
       )}
+
+      <Dialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setPendingDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar plantilla</DialogTitle>
+            <DialogDescription>
+              Se elimina «{pendingDelete?.name}» y todos sus registros de envío.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPendingDelete(null)}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Eliminando..." : "Eliminar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

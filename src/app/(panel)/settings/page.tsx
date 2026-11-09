@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -89,6 +90,12 @@ export default function SettingsPage() {
   const [senderForm, setSenderForm] = useState<SenderFormData>(EMPTY_SENDER_FORM);
   const [editingSenderId, setEditingSenderId] = useState<string | null>(null);
   const [verifyingIds, setVerifyingIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<{
+    kind: "sender" | "key";
+    id: string;
+    label: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchKeys();
@@ -251,19 +258,45 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleDeleteSender(id: string) {
-    if (!confirm("¿Eliminar este remitente?")) return;
+  function askDeleteSender(sender: SenderEntry) {
+    setDeleteTarget({ kind: "sender", id: sender.id, label: sender.name });
+  }
+
+  function askDeleteKey(key: ApiKeyEntry) {
+    setDeleteTarget({ kind: "key", id: key.id, label: key.name });
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      const res = await fetch(`/api/senders/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error ?? "Error al eliminar");
-        return;
+      if (deleteTarget.kind === "sender") {
+        const res = await fetch(`/api/senders/${deleteTarget.id}`, {
+          method: "DELETE",
+        });
+        if (!res.ok && res.status !== 204) {
+          const err = (await res.json().catch(() => ({}))) as { error?: string };
+          toast.error(err.error ?? "Error al eliminar");
+          return;
+        }
+        toast.success("Remitente eliminado");
+        fetchSenders();
+      } else {
+        const res = await fetch(`/api/keys/${deleteTarget.id}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          toast.error("Error al eliminar");
+          return;
+        }
+        toast.success("API key eliminada");
+        fetchKeys();
       }
-      toast.success("Remitente eliminado");
-      fetchSenders();
+      setDeleteTarget(null);
     } catch {
       toast.error("Error al eliminar");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -306,18 +339,6 @@ export default function SettingsPage() {
       toast.success(active ? "API key activada" : "API key desactivada");
     } catch {
       toast.error("Error al actualizar");
-    }
-  }
-
-  async function handleDeleteKey(id: string) {
-    if (!confirm("¿Eliminar esta API key?")) return;
-
-    try {
-      await fetch(`/api/keys/${id}`, { method: "DELETE" });
-      fetchKeys();
-      toast.success("API key eliminada");
-    } catch {
-      toast.error("Error al eliminar");
     }
   }
 
@@ -415,7 +436,7 @@ export default function SettingsPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleDeleteSender(s.id)}
+                                onClick={() => askDeleteSender(s)}
                               >
                                 Eliminar
                               </Button>
@@ -490,7 +511,7 @@ export default function SettingsPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleDeleteKey(k.id)}
+                              onClick={() => askDeleteKey(k)}
                             >
                               Eliminar
                             </Button>
@@ -660,6 +681,44 @@ export default function SettingsPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {deleteTarget?.kind === "sender"
+                ? "Eliminar remitente"
+                : "Eliminar API key"}
+            </DialogTitle>
+            <DialogDescription>
+              {deleteTarget?.kind === "sender"
+                ? `Se elimina el remitente «${deleteTarget.label}». Los envíos futuros no podrán usarlo.`
+                : `Se elimina la API key «${deleteTarget?.label ?? ""}». Los sistemas que la usen dejarán de autenticarse.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Eliminando..." : "Eliminar"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

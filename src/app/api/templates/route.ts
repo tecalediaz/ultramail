@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { extractVariables } from "@/lib/email/template-engine";
+import { requirePanelSession } from "@/lib/auth/guard";
 
 export async function GET() {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   const templates = await prisma.template.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -14,6 +18,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   let body: { name?: string; subject?: string; html?: string };
   try {
     body = await request.json();

@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { prisma } from "../db";
 import { sendSmtp } from "./smtp-transport";
 import { renderTemplate } from "./template-engine";
 

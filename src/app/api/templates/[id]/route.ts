@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { extractVariables } from "@/lib/email/template-engine";
+import { requirePanelSession } from "@/lib/auth/guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   const { id } = await params;
 
   const template = await prisma.template.findUnique({
@@ -22,6 +26,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  const denied = await requirePanelSession();
+  if (denied) return denied;
+
   const { id } = await params;
 
   let body: { name?: string; subject?: string; html?: string };
